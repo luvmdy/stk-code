@@ -562,9 +562,9 @@ void ServerLobby::asynchronousUpdate()
     {
         PeerVote winner_vote;
         m_winner_peer_id = std::numeric_limits<uint32_t>::max();
-        bool go_on_race = handleAllVotes(&winner_vote, &m_winner_peer_id);
-        if (go_on_race)
+        if (isVotingOver()) 
         {
+            getWinningVote(&winner_vote, &m_winner_peer_id);
             *m_default_vote = winner_vote;
             m_item_seed = (uint32_t)StkTime::getTimeSinceEpoch();
             ItemManager::updateRandomSeed(m_item_seed);
@@ -2515,16 +2515,9 @@ void ServerLobby::handlePlayerVote(Event* event)
  * \param winner_peer_id The host id of winner (unchanged if no vote).
  *  \return True if race can go on, otherwise wait.
  */
-bool ServerLobby::handleAllVotes(PeerVote* winner_vote,
+void ServerLobby::getWinningVote(PeerVote* winner_vote,
                                  uint32_t* winner_peer_id)
 {
-    // Determine majority agreement when 35% of voting time remains,
-    // reserve some time for kart selection so it's not 50%
-    if (getRemainingVotingTime() / getMaxVotingTime() > 0.35f)
-    {
-        return false;
-    }
-
     // First remove all votes from disconnected hosts
     auto it = m_peers_votes.begin();
     while (it != m_peers_votes.end())
@@ -2540,154 +2533,20 @@ bool ServerLobby::handleAllVotes(PeerVote* winner_vote,
 
     if (m_peers_votes.empty())
     {
-        if (isVotingOver())
-        {
-            *winner_vote = *m_default_vote;
-            return true;
-        }
-        return false;
+        *winner_vote = *m_default_vote;
+        return;
     }
 
-    // Count number of players 
-    float cur_players = 0.0f;
-    auto peers = STKHost::get()->getPeers();
-    for (auto peer : peers)
-    {
-        if (peer->hasPlayerProfiles() && !peer->isWaitingForGame())
-            cur_players += 1.0f;
-    }
+    // Otherwise if we have all votes, randomly select the vote
+    // to use in the next race.
+    RandomGenerator r;
+    auto vote = m_peers_votes.begin();
+    std::advance(vote, r.get(m_peers_votes.size()));
 
-    std::string top_track = m_default_vote->m_track_name;
-    int top_laps = m_default_vote->m_num_laps;
-    bool top_reverse = m_default_vote->m_reverse;
+    *winner_peer_id = vote->first;
+    *winner_vote = vote->second;
 
-    std::map<std::string, unsigned> tracks;
-    std::map<unsigned, unsigned> laps;
-    std::map<bool, unsigned> reverses;
-
-    // Ratio to determine majority agreement
-    float tracks_rate = 0.0f;
-    float laps_rate = 0.0f;
-    float reverses_rate = 0.0f;
-    RandomGenerator rg;
-
-    for (auto& p : m_peers_votes)
-    {
-        auto track_vote = tracks.find(p.second.m_track_name);
-        if (track_vote == tracks.end())
-            tracks[p.second.m_track_name] = 1;
-        else
-            track_vote->second++;
-        auto lap_vote = laps.find(p.second.m_num_laps);
-        if (lap_vote == laps.end())
-            laps[p.second.m_num_laps] = 1;
-        else
-            lap_vote->second++;
-        auto reverse_vote = reverses.find(p.second.m_reverse);
-        if (reverse_vote == reverses.end())
-            reverses[p.second.m_reverse] = 1;
-        else
-            reverse_vote->second++;
-    }
-
-    unsigned vote = 0;
-    auto track_vote = tracks.begin();
-    // rg.get(2) == 0 will allow not always the "less" in map get picked
-    for (auto c_vote = tracks.begin(); c_vote != tracks.end(); c_vote++)
-    {
-        if (c_vote->second > vote ||
-            (c_vote->second >= vote && rg.get(2) == 0))
-        {
-            vote = c_vote->second;
-            track_vote = c_vote;
-        }
-    }
-    if (track_vote != tracks.end())
-    {
-        top_track = track_vote->first;
-        tracks_rate = float(track_vote->second) / cur_players;
-    }
-
-    vote = 0;
-    auto lap_vote = laps.begin();
-    for (auto c_vote = laps.begin(); c_vote != laps.end(); c_vote++)
-    {
-        if (c_vote->second > vote ||
-            (c_vote->second >= vote && rg.get(2) == 0))
-        {
-            vote = c_vote->second;
-            lap_vote = c_vote;
-        }
-    }
-    if (lap_vote != laps.end())
-    {
-        top_laps = lap_vote->first;
-        laps_rate = float(lap_vote->second) / cur_players;
-    }
-
-    vote = 0;
-    auto reverse_vote = reverses.begin();
-    for (auto c_vote = reverses.begin(); c_vote != reverses.end(); c_vote++)
-    {
-        if (c_vote->second > vote ||
-            (c_vote->second >= vote && rg.get(2) == 0))
-        {
-            vote = c_vote->second;
-            reverse_vote = c_vote;
-        }
-    }
-    if (reverse_vote != reverses.end())
-    {
-        top_reverse = reverse_vote->first;
-        reverses_rate = float(reverse_vote->second) / cur_players;
-    }
-
-    // End early if there is majority agreement which is all entries rate > 0.5
-    it = m_peers_votes.begin();
-    if (tracks_rate > 0.5f && laps_rate > 0.5f && reverses_rate > 0.5f)
-    {
-        while (it != m_peers_votes.end())
-        {
-            if (it->second.m_track_name == top_track &&
-                it->second.m_num_laps == top_laps &&
-                it->second.m_reverse == top_reverse)
-                break;
-            else
-                it++;
-        }
-        if (it == m_peers_votes.end())
-        {
-            Log::warn("ServerLobby",
-                "Missing track %s from majority.", top_track.c_str());
-            it = m_peers_votes.begin();
-        }
-        *winner_peer_id = it->first;
-        *winner_vote = it->second;
-        return true;
-    }
-    else if (isVotingOver())
-    {
-        // Pick the best lap (or soccer goal / time) from only the top track
-        // if no majority agreement from all
-        int diff = std::numeric_limits<int>::max();
-        auto closest_lap = m_peers_votes.begin();
-        while (it != m_peers_votes.end())
-        {
-            if (it->second.m_track_name == top_track &&
-                std::abs((int)it->second.m_num_laps - top_laps) < diff)
-            {
-                closest_lap = it;
-                diff = std::abs((int)it->second.m_num_laps - top_laps);
-            }
-            else
-                it++;
-        }
-        *winner_peer_id = closest_lap->first;
-        *winner_vote = closest_lap->second;
-        return true;
-    }
-    return false;
-}   // handleAllVotes
+}   // getWinningVote
 
 // ----------------------------------------------------------------------------
 void ServerLobby::getHitCaptureLimit(float num_karts)

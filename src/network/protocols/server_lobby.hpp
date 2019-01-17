@@ -255,7 +255,7 @@ private:
                                   const std::string& iv,
                                   uint32_t online_id,
                                   const irr::core::stringw& online_name);
-    bool handleAllVotes(PeerVote* winner, uint32_t* winner_peer_id);
+    void getWinningVote(PeerVote* winner, uint32_t* winner_peer_id);
     void getRankingForPlayer(std::shared_ptr<NetworkPlayerProfile> p);
     void submitRankingsToAddons();
     void computeNewRankings();
