@@ -564,6 +564,8 @@ void Powerup::hitBonusBox(const ItemState &item_state)
 
     new_powerup = powerup_manager->getRandomPowerup(position, &n, 
                                                     random_number);
+    // TODO: FOR DEBUGGING ONLY!!!
+    new_powerup = PowerupManager::POWERUP_RUBBERBALL;
 
     // Always add a new powerup in ITEM_MODE_NEW (or if the kart
     // doesn't have a powerup atm).

@@ -721,7 +721,8 @@ namespace UserConfigParams
 
     /** Verbosity level for debug messages. Note that error and
      *  important warnings must always be printed. */
-    PARAM_PREFIX int  m_verbosity         PARAM_DEFAULT( 0 );
+    // DEBUG ONLY: ENFORE LOGING OF FLYABLES
+    PARAM_PREFIX int  m_verbosity         PARAM_DEFAULT( 0x00010);
 
     PARAM_PREFIX bool m_no_start_screen   PARAM_DEFAULT( false );
 

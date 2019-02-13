@@ -37,8 +37,7 @@
 #include "tracks/drive_graph.hpp"
 #include "tracks/drive_node.hpp"
 #include "tracks/track.hpp"
-
-#include "utils/log.hpp" //TODO: remove after debugging is done
+#include "utils/log.hpp"
 
 float RubberBall::m_st_interval;
 float RubberBall::m_st_min_interpolation_distance;
@@ -58,7 +57,7 @@ int   RubberBall::m_next_id = 0;
 
 
 // Debug only, so that we can get a feel on how well balls are aiming etc.
-#undef PRINT_BALL_REMOVE_INFO
+#define PRINT_BALL_REMOVE_INFO
 
 RubberBall::RubberBall(AbstractKart *kart)
           : Flyable(kart, PowerupManager::POWERUP_RUBBERBALL, 0.0f /* mass */),
@@ -225,20 +224,27 @@ void RubberBall::computeTarget()
             {
 #ifdef PRINT_BALL_REMOVE_INFO
                 Log::debug("[RubberBall]",
-                           "ball %d removed because owner is target.", m_id);
+                           "ball %d: removed because owner is target.", m_id);
 #endif
                 m_delete_ticks = m_st_delete_ticks;
             }
             return;
         }
+        if (UserConfigParams::logFlyable())
+            Log::debug("[RubberBall]",
+                       "ball %d: target id %d elim %d finished %d",
+                       m_id, m_target->getWorldKartId(),
+                       m_target->isEliminated(),
+                       m_target->hasFinishedRace());
+
     }   // for p > num_karts
 
     // This means it must be the end-animation phase. Now just
     // aim at the owner (the ball is unlikely to hit it), and
     // this will trigger the usage of the delete time in updateAndDelete
 #ifdef PRINT_BALL_REMOVE_INFO
-    Log::debug("[RubberBall]" "ball %d removed because no more active target.",
-               m_id);
+    Log::debug("[RubberBall]", "ball %d removed because no more active target %d.",
+               m_id, m_delete_ticks);
 #endif
     m_delete_ticks = m_st_delete_ticks;
     m_target       = m_owner;
@@ -403,7 +409,8 @@ bool RubberBall::updateAndDelete(int ticks)
         {
             hit(NULL);
 #ifdef PRINT_BALL_REMOVE_INFO
-            Log::debug("[RubberBall]", "ball %d deleted.", m_id);
+            Log::debug("[RubberBall]", "ball %d deleted, ticks %d.",
+                       m_id, m_delete_ticks);
 #endif
             return true;
         }
@@ -534,7 +541,15 @@ void RubberBall::moveTowardsTarget(Vec3 *next_xyz, int ticks)
 
     // If ball is close to the target, then explode
     if (diff.length() < m_target->getKartLength())
+    {
+        if (UserConfigParams::logFlyable())
+            Log::debug("[RubberBall]",
+                       "ball %d: target id %d closer than %f enough",
+                       m_id, m_target->getWorldKartId(),
+                       m_target->getKartLength());
+
         hit((AbstractKart*)m_target);
+    }
 
     assert(!std::isnan((*next_xyz)[0]));
     assert(!std::isnan((*next_xyz)[1]));
@@ -791,10 +806,11 @@ void RubberBall::updateDistanceToTarget()
         m_distance_to_target += Track::getCurrentTrack()->getTrackLength();
     }
     if(UserConfigParams::logFlyable())
-        Log::debug("[RubberBall]", "ball %d: target %f %f %f distance_2_target %f",
-        m_id, m_target->getXYZ().getX(),m_target->getXYZ().getY(),
-        m_target->getXYZ().getZ(),m_distance_to_target
-        );
+        Log::debug("[RubberBall]",
+                   "ball %d: target id %d pos %f %f %f distance_2_target %f",
+                   m_id, m_target->getWorldKartId(), m_target->getXYZ().getX(),
+                   m_target->getXYZ().getY(), m_target->getXYZ().getZ(),
+                   m_distance_to_target);
 
     float height_diff = fabsf((m_target->getXYZ() - getXYZ()).dot(getNormal().normalized()));
 
@@ -858,7 +874,7 @@ bool RubberBall::hit(AbstractKart* kart, PhysicalObject* object)
 {
 #ifdef PRINT_BALL_REMOVE_INFO
     if(kart)
-        Log::debug("[RuberBall]", "ball %d hit kart.", m_id);
+        Log::debug("[RuberBall]", "ball %d: hit kart %d.", m_id, kart->getWorldKartId());
 #endif
     if(kart && kart!=m_target)
     {
