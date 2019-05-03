@@ -161,11 +161,11 @@ void CaptureTheFlag::updateGraphics(float dt)
         m_blue_flag_indicator->setVisible(!m_blue_flag->isInBase());
 
     core::stringw msg;
-    // Don't show flag has been returned message if there was scored event
-    // happening recently
+    // Don't show flag has been returned message if
+    // a point has been scored recently
     const bool scored_recently =
         getTicksSinceStart() > m_last_captured_flag_ticks &&
-        getTicksSinceStart() - m_last_captured_flag_ticks < 200;
+        getTicksSinceStart() - m_last_captured_flag_ticks < stk_config->time2Ticks(2.0f);
     if (m_red_flag_status != m_red_flag->getStatus())
     {
         if (m_red_flag->getHolder() != -1)
@@ -215,7 +215,7 @@ void CaptureTheFlag::update(int ticks)
     for (auto it = m_swatter_reset_kart_ticks.begin();
          it != m_swatter_reset_kart_ticks.end();)
     {
-        if (it->second < getTicksSinceStart() - 1000)
+        if (it->second < getTicksSinceStart() - stk_config->time2Ticks(8.0f))
         {
             it = m_swatter_reset_kart_ticks.erase(it);
         }
@@ -248,7 +248,6 @@ void CaptureTheFlag::update(int ticks)
     m_blue_flag->update(ticks);
 
     if (m_red_flag->getHolder() != -1 && m_blue_flag->isInBase() &&
-        m_blue_flag->isActivated() &&
         (m_blue_flag->getBaseOrigin() - m_red_flag->getOrigin()).length() <
         g_capture_length)
     {
@@ -279,7 +278,6 @@ void CaptureTheFlag::update(int ticks)
         m_red_flag->resetToBase(race_manager->getFlagDeactivatedTicks());
     }
     else if (m_blue_flag->getHolder() != -1 && m_red_flag->isInBase() &&
-        m_red_flag->isActivated() &&
         (m_red_flag->getBaseOrigin() - m_blue_flag->getOrigin()).length() <
         g_capture_length)
     {
